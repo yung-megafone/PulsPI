@@ -14,12 +14,13 @@ PING_TARGET = "10.0.0.65"
 # LED setup
 led = machine.Pin("LED", machine.Pin.OUT)
 
-# Blink LED to test
-while True:
+# Non-blocking LED blinking using Timer
+def blink_led(timer):
     led.toggle()
-    time.sleep(2)
-    led.toggle()
-    time.sleep(0.5)
+
+# Set up a timer to toggle LED every 2.5 seconds
+timer = machine.Timer()
+timer.init(freq=0.4, mode=machine.Timer.PERIODIC, callback=blink_led)
 
 # Connect to Wi-Fi
 wlan = network.WLAN(network.STA_IF)
@@ -27,51 +28,18 @@ wlan.active(True)
 wlan.connect(SSID, PASSWORD)
 
 print("Connecting to Wi-Fi...")
-while not wlan.isconnected() and wlan.status() >= 0:
+timeout = 10  # Timeout after 10 seconds
+while not wlan.isconnected() and timeout > 0:
+    print("Waiting for connection...")
     time.sleep(1)
+    timeout -= 1
 
-print("Connected:", wlan.ifconfig())
+if wlan.isconnected():
+    print("Connected! IP address:", wlan.ifconfig()[0])
+else:
+    print("Failed to connect. Check credentials and signal strength.")
 
-# Function to check network status
-def get_network_status():
-    if wlan.isconnected():
-        return {
-            "status": "Connected",
-            "ip": wlan.ifconfig()[0],
-            "subnet": wlan.ifconfig()[1],
-            "gateway": wlan.ifconfig()[2],
-            "dns": wlan.ifconfig()[3]
-        }
-    else:
-        return {"status": "Disconnected"}
-
-# Function to ping a target
-def ping(host):
-    try:
-        addr = socket.getaddrinfo(host, 80)[0][-1][0]  # Resolve IP
-        start = time.ticks_ms()
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(1)
-        result = s.connect_ex((addr, 80))
-        s.close()
-        if result == 0:
-            latency = time.ticks_diff(time.ticks_ms(), start)
-            return f"Ping success: {latency}ms"
-        else:
-            return "Ping failed"
-    except Exception as e:
-        return f"Ping error: {str(e)}"
-
-# LED pulsing effect
-def pulse_led():
-    for i in range(0, 65535, 500):  # Fade in
-        led.duty_u16(i)
-        time.sleep(0.01)
-    for i in range(65535, 0, -500):  # Fade out
-        led.duty_u16(i)
-        time.sleep(0.01)
-
-# Start a simple web server
+# Start the web server
 def start_server():
     addr = socket.getaddrinfo("0.0.0.0", 80)[0][-1]
     
@@ -93,18 +61,18 @@ def start_server():
             return start_server()  # Restart the server
 
     while True:
-        pulse_led()  # Run LED pulsing
-
         cl, addr = s.accept()
         print("Client connected from", addr)
         
         request = cl.recv(1024)
         print("Request:", request)
 
-        network_status = get_network_status()
-        ping_result = ping(PING_TARGET)
+        network_status = {
+            "status": "Connected" if wlan.isconnected() else "Disconnected",
+            "ip": wlan.ifconfig()[0] if wlan.isconnected() else "N/A"
+        }
 
-        response = ujson.dumps({"network": network_status, "ping": ping_result})
+        response = ujson.dumps({"network": network_status})
         
         cl.send("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n")
         cl.send(response)
