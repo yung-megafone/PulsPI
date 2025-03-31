@@ -74,14 +74,29 @@ def ping(ip=config.TARGET):
         print(f"Ping to {ip}: Offline")
         return "Offline"
 
+### Current server config and firewall rules prevent establishing the TCP socket required by the following code block
+#### Will be adding this to the "will fix" list but not urgent since uping works fine. Sockets may prove more effiencient, though
+'''
+def ping(ip=config.TARGET):
+    try:
+        addr = socket.getaddrinfo(ip, 1)[0][-1]
+        s = socket.socket()
+        s.settimeout(1)
+        s.connect(addr)
+        s.close()
+        print(f"Ping to {ip}: Online")
+        return "Online"
+    except:
+        print(f"Ping to {ip}: Offline")
+        return "Offline"
+'''
 ##############################################################################################################
 ##############################################################################################################
 
 
 ###### We need to initialize the DHT11 and read data from it. Being a single wire digital output, we use GPIO22 (PIN29)
 
-### Specify in which pin the data shall be collected from (rather, where we decided to connect the sensor)
-#### This is the GPIO pin number, NOT the physical pin
+### Specify in which pin the data shall be collected from (rather where we decided to connect the sensor)
 sensor = dht.DHT11(Pin(22))
 
 ### Read sensor values and display them on screen.

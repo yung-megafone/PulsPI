@@ -10,7 +10,8 @@
 
 ## Planned Features
 - ✅ Server status monitoring using ICMP ping  
-- ✅ Performance estimation based on response times  
+- ✅ Performance estimation based on response times 
+- ✅ Realtime temperature and humidity monitoring via DHT11 sensor  
 - 🚧 SSH integration for accurate uptime data  
 - 🚧 Display support for real-time feedback  
 - 🚧 User input via physical buttons for additional stats (error count, connections, bandwidth)  
@@ -19,6 +20,7 @@
 ## Getting Started
 ### Prerequisites
 - **Raspberry Pi Pico W** (for Wi-Fi capability)  
+- **DHT11 or DHT22** (for environmental monitoring)
 - **MicroPython** installed on the Pico  
 - **USB cable** for flashing and debugging  
 - **Wi-Fi network**  
@@ -27,7 +29,7 @@
 ### Installation
 1. Clone the repo:
     ```bash
-    git clone https://github.com/yourusername/PulsPI.git
+    git clone https://github.com/yung-megafone/PulsPI.git
     cd PulsPI
     ```
 2. Install **MicroPython** on your Pico W using [Thonny](https://thonny.org/) or your preferred editor.  
