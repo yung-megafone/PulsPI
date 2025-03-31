@@ -80,7 +80,8 @@ def ping(ip=config.TARGET):
 
 ###### We need to initialize the DHT11 and read data from it. Being a single wire digital output, we use GPIO22 (PIN29)
 
-### Specify in which pin the data shall be collected from (rather where we decided to connect the sensor)
+### Specify in which pin the data shall be collected from (rather, where we decided to connect the sensor)
+#### This is the GPIO pin number, NOT the physical pin
 sensor = dht.DHT11(Pin(22))
 
 ### Read sensor values and display them on screen.
