@@ -20,14 +20,14 @@ This architecture prioritizes:
 The following diagrams provide visual references for PulsPI’s logic and execution model:
 
 * **Core Logic Flow** – high-level data and state relationships  
-  !(diagrams/PulsPI_Logic.svg)
+  ![](diagrams/PulsPI_Logic.svg)
 
 * **Main Loop Execution** – runtime polling and consumer updates  
-  !(diagrams/PulsPI_MainLoop.svg)
+  ![](diagrams/PulsPI_MainLoop.svg)
 
 * **Advanced State Flow** – detailed wiring-level view  
-  !(diagrams/PulsPI_AdvLogic.svg)
-  !(diagrams/PulsPI_AdvLogic_Alt.svg)
+  ![](diagrams/PulsPI_AdvLogic.svg)
+  ![](diagrams/PulsPI_AdvLogic_Alt.svg)
 
 These diagrams are the authoritative visual reference for the system and are maintained alongside the code.
 
