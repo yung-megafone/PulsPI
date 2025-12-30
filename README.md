@@ -2,7 +2,6 @@
 
 ![Platform](https://img.shields.io/badge/Platform-Pico%20%2F%20Pico%20W-black?logo=raspberrypi&logoColor=white&style=for-the-badge)
 ![Firmware](https://img.shields.io/badge/Firmware-MicroPython-blue?logo=python&logoColor=white&style=for-the-badge)
-![Language](https://img.shields.io/badge/Language-Python-blue?logo=python&logoColor=white&style=for-the-badge)
 ![Display](https://img.shields.io/badge/Display-I2C%2016x2-lightgrey?style=for-the-badge)
 ![Sensor](https://img.shields.io/badge/Sensor-DHT11-green?style=for-the-badge)
 ![CLI](https://img.shields.io/badge/CLI-Runtime%20Commands-lightgrey?style=for-the-badge)
@@ -11,9 +10,9 @@
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
 
-**PulsPI** is a Raspberry Pi Pico–based environmental and system monitoring project focused on real-time telemetry, local display output, and extensible control logic. It is designed to run reliably on both **Pico W** (with optional networking) and **standard Pico** hardware.
+**PulsPI** is a Raspberry Pi Pico–based environmental and system monitoring project focused on real-time telemetry, local display output, and extensible control logic for embedded monitoring tasks. It is designed to run reliably on both **Pico W** (with optional networking) and **standard Pico** hardware.
 
-At its core, PulsPI acts as a small, stateful monitoring appliance rather than a one-shot display script.
+At its core, PulsPI behaves as a small, stateful monitoring appliance rather than a one-shot display script.
 
 ---
 
@@ -166,6 +165,14 @@ PulsPI is intentionally built as:
 * Extensible without refactoring core logic
 
 Fan control and additional outputs are treated as *downstream consumers* of validated state, not ad-hoc logic bolted onto sensor reads.
+
+---
+
+## Architecture
+
+PulsPI follows a state-driven design where all inputs (physical sensors and runtime overrides) flow through a unified commit pipeline. Outputs (LCD rendering, future fan control, logging) consume shared state without coupling to input mechanisms.
+
+For details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
