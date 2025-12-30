@@ -1,48 +1,174 @@
 # PulsPI
 
-**PulsPI** is a Raspberry Pi Pico W-powered server uptime monitor designed to provide real-time insights into server performance and availability. With customizable monitoring intervals and performance tracking, PulsPI ensures your network stays in check.
+![Platform](https://img.shields.io/badge/Platform-Pico%20%2F%20Pico%20W-black?logo=raspberrypi&logoColor=white&style=for-the-badge)
+![Firmware](https://img.shields.io/badge/Firmware-MicroPython-blue?logo=python&logoColor=white&style=for-the-badge)
+![Language](https://img.shields.io/badge/Language-Python-blue?logo=python&logoColor=white&style=for-the-badge)
+![Display](https://img.shields.io/badge/Display-I2C%2016x2-lightgrey?style=for-the-badge)
+![Sensor](https://img.shields.io/badge/Sensor-DHT11-green?style=for-the-badge)
+![CLI](https://img.shields.io/badge/CLI-Runtime%20Commands-lightgrey?style=for-the-badge)
+![Download](https://img.shields.io/badge/Download-GitHub-brightgreen?logo=github&logoColor=white&style=for-the-badge)
+![License](https://img.shields.io/badge/License-Prosperity-blue?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
+
+
+**PulsPI** is a Raspberry Pi Pico–based environmental and system monitoring project focused on real-time telemetry, local display output, and extensible control logic. It is designed to run reliably on both **Pico W** (with optional networking) and **standard Pico** hardware.
+
+At its core, PulsPI acts as a small, stateful monitoring appliance rather than a one-shot display script.
+
+---
 
 ## Features
-- **Server Monitoring:** Continuously pings your server to check its uptime and responsiveness.
-- **Latency Measurement:** Tracks response times to assess network performance.
-- **Local Display:** Outputs real-time status to a display.
-- **Future Expansion:** Planned features include SSH-based uptime checks, error detection, temperature monitoring, and automated auxiliary fan control.
+
+* **Realtime Temperature & Humidity Monitoring**
+  Uses a DHT11 sensor with non-blocking reads and cached values to avoid UI freezes.
+
+* **Local LCD Output (16×2 I²C)**
+  Flicker-free display updates using differential line writes instead of full clears.
+
+* **Runtime Command Interface (USB REPL)**
+  Interactive, non-blocking command input for:
+
+  * Live value overrides
+  * Multi-command lines
+  * Semicolon-delimited commands
+  * Built-in `help` documentation
+
+* **Override Pipeline (First-Class Data)**
+  Command overrides are treated identically to real sensor readings, allowing realistic testing and future control logic validation.
+
+* **Min / Max Tracking (Since Boot)**
+  Tracks minimum and maximum temperature and humidity values and displays them inline.
+
+* **Uptime Tracking with Day Conversion**
+  Converts long uptimes into `Xd HH:MM` format for readability.
+
+* **Optional Networking (Pico W only)**
+  Networking and ICMP ping functionality are loaded conditionally and fail gracefully on non-Wi-Fi hardware.
+
+* **Debug Visibility**
+
+  * Sensor vs override source tracking
+  * Runtime status inspection via CLI
+
+---
+
+## Current Display Pages
+
+* **Page 1**
+
+  ```
+  Up: 1d 04:17
+  T 32/41 H 38/62
+  ```
+
+* **Page 2**
+
+  ```
+  Temp: 36 °C
+  Humid: 45 % RH
+  ```
+
+---
+
+## Command Interface
+
+Available at runtime over the USB serial console.
+
+### Examples
+
+```
+temp 42
+hum 55
+time 3d 04:17
+```
+
+Multiple commands per line:
+
+```
+hum 50 temp 30 time 2d 01:00
+```
+
+Semicolon-delimited:
+
+```
+temp 35; hum 60; time 5:00:00
+```
+
+Help:
+
+```
+help
+help time
+```
+
+Debug:
+
+```
+status
+sensor
+minmax clear
+```
+
+---
 
 ## Planned Features
-- ✅ Server status monitoring using ICMP ping  
-- ✅ Performance estimation based on response times 
-- ✅ Realtime temperature and humidity monitoring via DHT11 sensor  
-- 🚧 SSH integration for accurate uptime data  
-- 🚧 Display support for real-time feedback  
-- 🚧 User input via physical buttons for additional stats (error count, connections, bandwidth)  
-- 🚧 Temperature-based fan control using relays and a DHT11 sensor  
 
-## Getting Started
-### Prerequisites
-- **Raspberry Pi Pico W** (for Wi-Fi capability)  
-- **DHT11 or DHT22** (for environmental monitoring)
-- **MicroPython** installed on the Pico  
-- **USB cable** for flashing and debugging  
-- **Wi-Fi network**  
-- Optional: DHT11 sensor, relays, and buttons for future expansions  
+* Temperature-based fan control (PWM / relay output)
+* Rolling averages and trend data
+* Bar-graph / history display page
+* Flash-backed persistence for min/max values
+* Optional button input for page control
 
-### Installation
-1. Clone the repo:
-    ```bash
-    git clone https://github.com/yung-megafone/PulsPI.git
-    cd PulsPI
-    ```
-2. Install **MicroPython** on your Pico W using [Thonny](https://thonny.org/) or your preferred editor.  
-3. Update the script with your Wi-Fi credentials and server IP.  
-4. Upload the script to the Pico.  
+---
 
-### Usage
-- Connect your Pico W to power.  
-- View the console output for real-time status updates.  
-- Future updates will include display integration and external button controls.  
+## Hardware Requirements
 
-## Contributing
-Contributions are welcome! Feel free to fork the project, create a feature branch, and submit a pull request.  
+### Required
+
+* Raspberry Pi **Pico** or **Pico W**
+* 16×2 I²C LCD (HD44780 compatible)
+* DHT11 sensor
+* MicroPython
+
+### Optional
+
+* Wi-Fi network (Pico W only)
+* External fan or relay hardware (future work)
+
+---
+
+## Installation
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/yung-megafone/PulsPI.git
+   cd PulsPI
+   ```
+
+2. Flash **MicroPython** to your Pico using Thonny or your preferred tool.
+
+3. Copy `main.py` and `config.py` to the Pico.
+
+4. (Optional) Configure Wi-Fi credentials and ping target in `config.py`.
+
+5. Power the device and open the serial console to interact with PulsPI.
+
+---
+
+## Project Philosophy
+
+PulsPI is intentionally built as:
+
+* A **single-file, inspectable system**
+* Hardware-aware (no unnecessary abstractions)
+* Resistant to UI jitter and blocking behavior
+* Extensible without refactoring core logic
+
+Fan control and additional outputs are treated as *downstream consumers* of validated state, not ad-hoc logic bolted onto sensor reads.
+
+---
 
 ## License
+
 This project is licensed under the **Prosperity License**.
