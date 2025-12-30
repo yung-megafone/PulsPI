@@ -9,7 +9,6 @@
 ![License](https://img.shields.io/badge/License-Prosperity-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
-
 **PulsPI** is a Raspberry Pi Pico–based environmental and system monitoring project focused on real-time telemetry, local display output, and extensible control logic for embedded monitoring tasks. It is designed to run reliably on both **Pico W** (with optional networking) and **standard Pico** hardware.
 
 At its core, PulsPI behaves as a small, stateful monitoring appliance rather than a one-shot display script.
@@ -18,34 +17,32 @@ At its core, PulsPI behaves as a small, stateful monitoring appliance rather tha
 
 ## Features
 
-* **Realtime Temperature & Humidity Monitoring**
+* **Realtime Temperature & Humidity Monitoring**  
   Uses a DHT11 sensor with non-blocking reads and cached values to avoid UI freezes.
 
-* **Local LCD Output (16×2 I²C)**
+* **Local LCD Output (16×2 I²C)**  
   Flicker-free display updates using differential line writes instead of full clears.
 
-* **Runtime Command Interface (USB REPL)**
+* **Runtime Command Interface (USB REPL)**  
   Interactive, non-blocking command input for:
-
   * Live value overrides
   * Multi-command lines
   * Semicolon-delimited commands
   * Built-in `help` documentation
 
-* **Override Pipeline (First-Class Data)**
+* **Override Pipeline (First-Class Data)**  
   Command overrides are treated identically to real sensor readings, allowing realistic testing and future control logic validation.
 
-* **Min / Max Tracking (Since Boot)**
+* **Min / Max Tracking (Since Boot)**  
   Tracks minimum and maximum temperature and humidity values and displays them inline.
 
-* **Uptime Tracking with Day Conversion**
+* **Uptime Tracking with Day Conversion**  
   Converts long uptimes into `Xd HH:MM` format for readability.
 
-* **Optional Networking (Pico W only)**
+* **Optional Networking (Pico W only)**  
   Networking and ICMP ping functionality are loaded conditionally and fail gracefully on non-Wi-Fi hardware.
 
 * **Debug Visibility**
-
   * Sensor vs override source tracking
   * Runtime status inspection via CLI
 
@@ -53,19 +50,37 @@ At its core, PulsPI behaves as a small, stateful monitoring appliance rather tha
 
 ## Current Display Pages
 
-* **Page 1**
+**Page 1**
+```
 
-  ```
-  Up: 1d 04:17
-  T 32/41 H 38/62
-  ```
+Up: 1d 04:17
+T 32/41 H 38/62
 
-* **Page 2**
+```
 
-  ```
-  Temp: 36 °C
-  Humid: 45 % RH
-  ```
+**Page 2**
+```
+
+Temp: 36 °C
+Humid: 45 % RH
+
+```
+
+---
+
+## Architecture Overview
+
+### Core Data Flow
+High-level view of how sensor data and runtime overrides flow into shared state and are consumed by outputs.
+
+![Core Logic](diagrams/PulsPI_Logic.svg)
+
+### Main Loop Execution
+Shows how the main loop polls inputs, updates state, and drives consumers without blocking.
+
+![Main Loop](diagrams/PulsPI_MainLoop.svg)
+
+For deeper wiring-level diagrams and alternate views, see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
@@ -74,39 +89,44 @@ At its core, PulsPI behaves as a small, stateful monitoring appliance rather tha
 Available at runtime over the USB serial console.
 
 ### Examples
-
 ```
+
 temp 42
 hum 55
 time 3d 04:17
+
 ```
 
 Multiple commands per line:
-
 ```
+
 hum 50 temp 30 time 2d 01:00
+
 ```
 
 Semicolon-delimited:
-
 ```
+
 temp 35; hum 60; time 5:00:00
+
 ```
 
 Help:
-
 ```
+
 help
 help time
+
 ```
 
 Debug:
-
 ```
+
 status
 sensor
 minmax clear
-```
+
+````
 
 ---
 
@@ -123,14 +143,12 @@ minmax clear
 ## Hardware Requirements
 
 ### Required
-
 * Raspberry Pi **Pico** or **Pico W**
 * 16×2 I²C LCD (HD44780 compatible)
 * DHT11 sensor
 * MicroPython
 
 ### Optional
-
 * Wi-Fi network (Pico W only)
 * External fan or relay hardware (future work)
 
@@ -139,11 +157,10 @@ minmax clear
 ## Installation
 
 1. Clone the repository:
-
    ```bash
    git clone https://github.com/yung-megafone/PulsPI.git
    cd PulsPI
-   ```
+````
 
 2. Flash **MicroPython** to your Pico using Thonny or your preferred tool.
 
@@ -165,14 +182,6 @@ PulsPI is intentionally built as:
 * Extensible without refactoring core logic
 
 Fan control and additional outputs are treated as *downstream consumers* of validated state, not ad-hoc logic bolted onto sensor reads.
-
----
-
-## Architecture
-
-PulsPI follows a state-driven design where all inputs (physical sensors and runtime overrides) flow through a unified commit pipeline. Outputs (LCD rendering, future fan control, logging) consume shared state without coupling to input mechanisms.
-
-For details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 

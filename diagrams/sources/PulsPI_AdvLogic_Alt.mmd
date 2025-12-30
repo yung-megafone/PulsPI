@@ -1,0 +1,239 @@
+---
+config:
+  theme: base
+  themeVariables:
+    background: transparent
+    primaryColor: '#2e3752'
+    secondaryColor: '#364064'
+    tertiaryColor: '#2a3148'
+    primaryTextColor: '#e6e9f5'
+    secondaryTextColor: '#c8cde3'
+    tertiaryTextColor: '#aeb6d2'
+    lineColor: '#7e8db6'
+    arrowheadColor: '#9aa6c6'
+    nodeBorder: '#6476a9'
+    clusterBorder: '#516085'
+    fontFamily: ''
+    fontSize: 15px
+  layout: elk
+---
+flowchart LR
+subgraph BOOT["Boot and Initialization"]
+    A0["Start"] --> A1["Imports / module init"]
+    A1 --> A2{"try: import uping"}
+    A2 -->|Success| A3["NET_AVAILABLE = True"]
+    A2 -->|ImportError| A4["NET_AVAILABLE = False"]
+
+    A3 --> A5["LCD init: I2C + I2cLcd()"]
+    A4 --> A5
+    A5 --> A6["lcd_write_line(row,text) setup"]
+    A6 --> A7["lcd_new_page() setup"]
+
+    A7 --> A8{"NET_AVAILABLE?"}
+    A8 -->|Yes| A9["Network init: network.WLAN(STA_IF)"]
+    A9 --> A10["wlan.active(True)"]
+    A10 --> A11["wlan.connect(SSID,PASSWORD)"]
+    A11 --> A12["Wait up to 10s: for _ in range(10)"]
+    A12 --> A13{"wlan.isconnected()?"}
+    A13 -->|Yes| A14["Network ready: wlan.ifconfig()"]
+    A13 -->|No| A15["Continue without net features"]
+    A8 -->|No| A16["Skip network setup"]
+
+    A14 --> A17["sensor = dht.DHT11(Pin(22))"]
+    A15 --> A17
+    A16 --> A17
+
+    A17 --> A18["Init overrides: OVERRIDE_TEMP/HUM/OFFSET"]
+    A18 --> A19["Init stats: MIN/MAX temp+hum"]
+    A19 --> A20["Init cache: LAST_TEMP/HUM/LAST_READ_MS"]
+    A20 --> A21["start_time = utime.ticks_ms()"]
+end
+A21 --> L0["while True"]
+
+subgraph LOOP["Main loop scheduling"]
+    L0 --> L1["Page 1 loop: 5s"]
+    L1 --> L2["Page 2 loop: 5s"]
+    L2 --> L0
+end
+subgraph CMD["poll_command()"]
+    C0["poll_command()"] --> C1{"SELECT_AVAILABLE?"}
+    C1 -->|No| C99["return"]
+    C1 -->|Yes| C2{"stdin ready? select.select(...,0)"}
+    C2 -->|No| C99
+    C2 -->|Yes| C3["line = sys.stdin.readline().strip()"]
+    C3 --> C4{"';' in line?"}
+    C4 -->|Yes| C5["split by ';'"]
+    C5 --> C6["handle_cmd(cmd) for each"]
+    C4 -->|No| C7["token-walk parse"]
+    C7 --> C6
+    C6 --> C99
+end
+
+subgraph CMDACT["handle_cmd() actions"]
+    D0["help"] --> D1["print_help()"]
+    D2["help time"] --> D3["print_help('time')"]
+
+    D4["temp <n>"] --> D5["OVERRIDE_TEMP = float(n)"]
+    D6["hum <n>"] --> D7["OVERRIDE_HUM = float(n)"]
+
+    D8["time <str>"] --> D9["desired_seconds = parse_uptime_str(str)"]
+    D9 --> D10["actual_elapsed_s = (ticks_ms-start_time)/1000"]
+    D10 --> D11["OVERRIDE_UPTIME_OFFSET_S = desired_seconds - actual_elapsed_s"]
+
+    D12["clear"] --> D13["OVERRIDE_TEMP=None; OVERRIDE_HUM=None; OFFSET=0"]
+    D14["temp clear"] --> D15["OVERRIDE_TEMP=None"]
+    D16["hum clear"] --> D17["OVERRIDE_HUM=None"]
+    D18["time clear"] --> D19["OVERRIDE_UPTIME_OFFSET_S=0"]
+
+    D20["minmax clear"] --> D21["MIN/MAX reset to None"]
+    D22["status"] --> D23["print overrides + stats + source"]
+    D24["sensor"] --> D25["print SENSOR_SOURCE + LAST values"]
+end
+C6 --> D0
+C6 --> D2
+C6 --> D4
+C6 --> D6
+C6 --> D8
+C6 --> D12
+C6 --> D14
+C6 --> D16
+C6 --> D18
+C6 --> D20
+C6 --> D22
+C6 --> D24
+subgraph UPT["get_uptime()"]
+    U0["get_uptime()"] --> U1["elapsed_s = (ticks_ms-start_time)//1000"]
+    U1 --> U2["total_s = elapsed_s + OVERRIDE_UPTIME_OFFSET_S"]
+    U2 --> U3{"total_hours >= 72?"}
+    U3 -->|Yes| U4["format: 'Xd HH:MM'"]
+    U3 -->|No| U5["format: 'H:MM:SS'"]
+end
+
+subgraph UPTPARSE["parse_uptime_str(str)"]
+    P0["parse_uptime_str(str)"] --> P1["optional days parse: 'Xd'"]
+    P1 --> P2["split ':' parts"]
+    P2 --> P3["return total seconds"]
+end
+
+D9 --> P0
+subgraph SENS["get_temp_and_humidity()"]
+    S0["get_temp_and_humidity()"] --> S1{"override active?"}
+    S1 -->|Yes| S2["temp = OVERRIDE_TEMP or LAST_TEMP"]
+    S2 --> S3["hum = OVERRIDE_HUM or LAST_HUM"]
+    S3 --> S4["commit_reading(temp,hum,now,'override')"]
+
+    S1 -->|No| S5{"cache fresh? ticks_diff(now,LAST_READ_MS) < 2000"}
+    S5 -->|Yes| S6["return LAST_TEMP, LAST_HUM"]
+
+    S5 -->|No| S7["sensor.measure()"]
+    S7 --> S8{"OSError?"}
+    S8 -->|Yes| S9["return LAST_TEMP, LAST_HUM"]
+
+    S8 -->|No| S10["temp = sensor.temperature()"]
+    S10 --> S11["hum = sensor.humidity()"]
+    S11 --> S12["commit_reading(temp,hum,now,'sensor')"]
+    S12 --> S13["return temp, hum"]
+end
+
+subgraph COMMIT["commit_reading(temp,hum,now,source)"]
+    K0["commit_reading(...)"] --> K1["LAST_TEMP=temp; LAST_HUM=hum"]
+    K1 --> K2["LAST_READ_MS=now"]
+    K2 --> K3["SENSOR_SOURCE=source"]
+    K3 --> K4["update_min_max(temp,hum)"]
+end
+
+S4 --> K0
+S12 --> K0
+
+subgraph MINMAX["update_min_max(temp,hum)"]
+    Mx0["update_min_max(...)"] --> Mx1{"temp is None?"}
+    Mx1 -->|No| Mx2{"MIN_TEMP None or temp < MIN_TEMP?"}
+    Mx2 -->|Yes| Mx3["MIN_TEMP = temp"]
+    Mx2 -->|No| Mx4["no change"]
+    Mx1 -->|Yes| Mx4
+
+    Mx4 --> Mx5{"MAX_TEMP None or temp > MAX_TEMP?"}
+    Mx5 -->|Yes| Mx6["MAX_TEMP = temp"]
+    Mx5 -->|No| Mx7["no change"]
+
+    Mx7 --> Mx8{"hum is None?"}
+    Mx8 -->|No| Mx9{"MIN_HUM None or hum < MIN_HUM?"}
+    Mx9 -->|Yes| Mx10["MIN_HUM = hum"]
+    Mx9 -->|No| Mx11["no change"]
+    Mx8 -->|Yes| Mx11
+
+    Mx11 --> Mx12{"MAX_HUM None or hum > MAX_HUM?"}
+    Mx12 -->|Yes| Mx13["MAX_HUM = hum"]
+    Mx12 -->|No| Mx14["no change"]
+end
+
+K4 --> Mx0
+subgraph NET["ping(ip)"]
+    N0["ping(ip)"] --> N1{"NET_AVAILABLE?"}
+    N1 -->|No| N9["return ''"]
+    N1 -->|Yes| N2{"wlan.isconnected()?"}
+    N2 -->|No| N9
+    N2 -->|Yes| N3["uping.ping(ip)"]
+    N3 --> N4{"tuple response?"}
+    N4 -->|Yes| N5["ping_time = response[1]"]
+    N5 --> N6["return 'Online, <ms>'"]
+    N4 -->|No| N7{"response not None?"}
+    N7 -->|Yes| N6
+    N7 -->|No| N9
+end
+subgraph LCD["LCD rendering helpers"]
+    X0["lcd_new_page()"] --> X1["_last_l0=None; _last_l1=None"]
+    X2["lcd_write_line(row,text)"] --> X3["pad/trim to 16 chars"]
+    X3 --> X4{"unchanged from cache?"}
+    X4 -->|Yes| X9["skip write"]
+    X4 -->|No| X5["lcd.move_to(0,row)"]
+    X5 --> X6["lcd.putstr(text)"]
+end
+subgraph PAGE1["Page 1: Uptime + Min/Max"]
+    Y0["Page1 tick"] --> Y1["poll_command()"]
+    Y1 --> Y2["uptime_str = get_uptime()"]
+    Y2 --> Y3["get_temp_and_humidity() for stats refresh"]
+    Y3 --> Y4["row0 = 'Up: ' + uptime_str"]
+    Y4 --> Y5["row1 = 'T mn/mx H mn/mx'"]
+    Y5 --> Y6["lcd_write_line(0,row0)"]
+    Y6 --> Y7["lcd_write_line(1,row1)"]
+    Y7 --> Y8["utime.sleep(1)"]
+end
+
+subgraph PAGE2["Page 2: Live Temp/Hum"]
+    Z0["Page2 tick"] --> Z1["poll_command()"]
+    Z1 --> Z2["temp,hum = get_temp_and_humidity()"]
+    Z2 --> Z3["row0 = 'Temp: <t> °C'"]
+    Z3 --> Z4["row1 = 'Humid: <h> % RH'"]
+    Z4 --> Z5["lcd_write_line(0,row0)"]
+    Z5 --> Z6["lcd_write_line(1,row1)"]
+    Z6 --> Z7["utime.sleep(1)"]
+end
+L1 --> X0 --> Y0
+Y6 --> X2
+Y7 --> X2
+
+L2 --> X0 --> Z0
+Z5 --> X2
+Z6 --> X2
+Y0 -. optional .-> N0
+C4@{ shape: diamond }
+C5@{ shape: rect }
+U4@{ shape: rect }
+U5@{ shape: rect }
+P1@{ shape: rect }
+N9@{ shape: rect }
+N5@{ shape: rect }
+style BOOT fill:#363e5a,stroke:#537ac7,stroke-width:1.5px
+style LOOP fill:#252b40,stroke:#516085,stroke-width:1.25px
+style CMD fill:#475070,stroke:#6da6f6,stroke-width:2px
+style CMDACT fill:#252b40,stroke:#516085,stroke-width:1.25px
+style UPT fill:#394265,stroke:#8091bf,stroke-width:1.5px
+style UPTPARSE fill:#252b40,stroke:#516085,stroke-width:1.25px
+style SENS fill:#252b40,stroke:#516085,stroke-width:1.25px
+style COMMIT fill:#252b40,stroke:#516085,stroke-width:1.25px
+style MINMAX fill:#252b40,stroke:#516085,stroke-width:1.25px
+style NET fill:#394867,stroke:#8091bf,stroke-width:1.5px
+style LCD fill:#252b40,stroke:#516085,stroke-width:1.25px
+style PAGE1 fill:#252b40,stroke:#516085,stroke-width:1.25px
+style PAGE2 fill:#252b40,stroke:#516085,stroke-width:1.25px
