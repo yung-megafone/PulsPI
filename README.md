@@ -24,9 +24,9 @@ At its core, PulsPI behaves as a small, stateful monitoring appliance rather tha
   Flicker-free display updates using differential line writes instead of full clears.
 
 * **Runtime Command Interface (USB REPL)**  
-  Interactive, non-blocking command input for:
+  Interactive, non-blocking command input supporting:
   * Live value overrides
-  * Multi-command lines
+  * Multi-command input
   * Semicolon-delimited commands
   * Built-in `help` documentation
 
@@ -44,7 +44,7 @@ At its core, PulsPI behaves as a small, stateful monitoring appliance rather tha
 
 * **Debug Visibility**
   * Sensor vs override source tracking
-  * Runtime status inspection via CLI
+  * Runtime state inspection via CLI
 
 ---
 
@@ -164,7 +164,7 @@ minmax clear
 
 2. Flash **MicroPython** to your Pico using Thonny or your preferred tool.
 
-3. Copy `main.py` and `config.py` to the Pico.
+3. Copy the contents of `src/` to the Pico (`main.py`, `config.py`).
 
 4. (Optional) Configure Wi-Fi credentials and ping target in `config.py`.
 
@@ -181,7 +181,18 @@ PulsPI is intentionally built as:
 * Resistant to UI jitter and blocking behavior
 * Extensible without refactoring core logic
 
-Fan control and additional outputs are treated as *downstream consumers* of validated state, not ad-hoc logic bolted onto sensor reads.
+Safety mechanisms and control logic (fan control, alarms) are implemented as *downstream consumers* of validated state, not as ad-hoc logic attached to sensor reads.
+
+---
+
+## Third-Party Libraries
+
+PulsPI depends on the following third-party components:
+
+* `pico_i2c_lcd` — MIT License
+* `lcd_api` — MIT License
+
+These libraries are used as-is and remain licensed under their respective terms.
 
 ---
 
