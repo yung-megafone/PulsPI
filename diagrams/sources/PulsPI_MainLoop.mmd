@@ -1,0 +1,194 @@
+---
+config:
+  theme: dark
+  themeVariables:
+    background: '#0e0e0e'
+    primaryColor: '#1e1e1e'
+    secondaryColor: '#252525'
+    tertiaryColor: '#2a2a2a'
+    primaryTextColor: '#e6e6e6'
+    secondaryTextColor: '#cfcfcf'
+    tertiaryTextColor: '#b5b5b5'
+    lineColor: '#5a5a5a'
+    arrowheadColor: '#8a8a8a'
+    nodeBorder: '#444444'
+    clusterBorder: '#3a3a3a'
+    fontFamily: ''
+    fontSize: 13px
+---
+flowchart LR
+
+%% =========================
+%% BOOT / INIT
+%% =========================
+subgraph BOOT["Boot / Init"]
+    B0["Start"] --> B1["Imports"]
+    B1 --> B2{"try: import uping"}
+    B2 -->|ok| B3["NET_AVAILABLE = True"]
+    B2 -->|fail| B4["NET_AVAILABLE = False"]
+
+    B3 --> B5["LCD init: I2C + I2cLcd()"]
+    B4 --> B5
+    B5 --> B6["Init LCD helpers: lcd_write_line() / lcd_new_page()"]
+
+    B6 --> B7{"NET_AVAILABLE?"}
+    B7 -->|Yes| B8["WLAN init: network.WLAN(STA_IF)"]
+    B8 --> B9["wlan.connect(SSID,PASSWORD)"]
+    B9 --> B10["Connect wait: up to 10s"]
+    B10 --> B11{"wlan.isconnected()?"}
+    B11 -->|Yes| B12["Network ready"]
+    B11 -->|No| B13["Continue without network"]
+    B7 -->|No| B14["Skip network setup"]
+
+    B12 --> B15["Sensor init: dht.DHT11(Pin(22))"]
+    B13 --> B15
+    B14 --> B15
+
+    B15 --> B16["Init overrides / stats / cache"]
+    B16 --> B17["start_time = utime.ticks_ms()"]
+end
+
+%% =========================
+%% MAIN LOOP SPINE
+%% =========================
+subgraph SPINE["Main Loop Spine"]
+    M0["while True"] --> M1["Page 1 loop: 5s"]
+    M1 --> M2["Page 2 loop: 5s"]
+    M2 --> M0
+end
+
+B17 --> M0
+
+%% =========================
+%% COMMANDS
+%% =========================
+subgraph CMD["Runtime CLI"]
+    C0["poll_command()"] --> C1{"SELECT_AVAILABLE?"}
+    C1 -->|No| C9["return"]
+    C1 -->|Yes| C2{"stdin ready?"}
+    C2 -->|No| C9
+    C2 -->|Yes| C3["line = readline().strip()"]
+    C3 --> C4{"';' in line?"}
+    C4 -->|Yes| C5["split by ';'"]
+    C4 -->|No| C6["token walk parse"]
+    C5 --> C7["handle_cmd(cmd)"]
+    C6 --> C7
+    C7 --> C9
+
+    C7 --> Ahelp["help / help time"]
+    C7 --> Atemp["temp <n> / temp clear"]
+    C7 --> Ahum["hum <n> / hum clear"]
+    C7 --> Atime["time <str> / time clear"]
+    C7 --> Aclr["clear (all overrides)"]
+    C7 --> Aminmax["minmax clear"]
+    C7 --> Astat["status / sensor"]
+end
+
+subgraph CMDACT["CLI Actions"]
+    Ahelp --> Phelp["print_help()"]
+    Atemp --> OTemp["OVERRIDE_TEMP set/clear"]
+    Ahum --> OHum["OVERRIDE_HUM set/clear"]
+    Atime --> Ptime["parse_uptime_str() -> offset seconds"]
+    Aclr --> OAll["clear all overrides"]
+    Aminmax --> Rmm["reset MIN/MAX"]
+    Astat --> Dbg["print debug status"]
+end
+
+%% =========================
+%% UPTIME
+%% =========================
+subgraph UPT["Uptime"]
+    U0["get_uptime()"] --> U1["elapsed = (ticks_ms-start_time)//1000"]
+    U1 --> U2["total = elapsed + OVERRIDE_UPTIME_OFFSET_S"]
+    U2 --> U3{"hours >= 72?"}
+    U3 -->|Yes| U4["format 'Xd HH:MM'"]
+    U3 -->|No| U5["format 'H:MM:SS'"]
+end
+
+subgraph PARSE["Uptime Parser"]
+    P0["parse_uptime_str(str)"] --> P1["accepts 'H:MM:SS' or 'Xd HH:MM'"]
+    P1 --> P2["returns seconds"]
+end
+
+Ptime --> P0
+
+%% =========================
+%% SENSOR + CACHE + COMMIT
+%% =========================
+subgraph PIPE["Sensor Pipeline"]
+    S0["get_temp_and_humidity()"] --> S1{"override active?"}
+    S1 -->|Yes| S2["use OVERRIDE_TEMP/HUM"]
+    S1 -->|No| S3{"cache fresh < 2s?"}
+    S3 -->|Yes| S4["return LAST_TEMP/HUM"]
+    S3 -->|No| S5["sensor.measure()"]
+    S5 --> S6{"read ok?"}
+    S6 -->|Yes| S7["temp=sensor.temperature()"]
+    S7 --> S8["hum=sensor.humidity()"]
+    S6 -->|No| S9["return LAST_TEMP/HUM"]
+end
+
+subgraph COMMIT["Commit + Stats"]
+    K0["commit_reading(temp,hum,now,source)"] --> K1["LAST_TEMP/HUM update"]
+    K1 --> K2["LAST_READ_MS update"]
+    K2 --> K3["SENSOR_SOURCE update"]
+    K3 --> K4["update_min_max(temp,hum)"]
+end
+
+subgraph MINMAX["Min/Max Tracking"]
+    MM0["update_min_max()"] --> MM1["MIN/MAX TEMP update if needed"]
+    MM1 --> MM2["MIN/MAX HUM update if needed"]
+end
+
+S2 --> K0
+S8 --> K0
+K4 --> MM0
+
+%% =========================
+%% OPTIONAL NETWORK PING
+%% =========================
+subgraph NET["Networking (optional)"]
+    N0["ping(ip)"] --> N1{"NET_AVAILABLE?"}
+    N1 -->|No| N9["return ''"]
+    N1 -->|Yes| N2{"wlan.isconnected()?"}
+    N2 -->|No| N9
+    N2 -->|Yes| N3["uping.ping(ip)"]
+    N3 --> N4{"ok?"}
+    N4 -->|Yes| N5["return 'Online, ms'"]
+    N4 -->|No| N9
+end
+
+%% =========================
+%% LCD RENDERING
+%% =========================
+subgraph LCD["LCD Rendering"]
+    L0["lcd_new_page()"] --> L1["_last_l0/_last_l1 = None"]
+    L2["lcd_write_line(row,text)"] --> L3["pad/trim to 16 chars"]
+    L3 --> L4{"changed?"}
+    L4 -->|No| L9["skip"]
+    L4 -->|Yes| L5["move_to + putstr"]
+end
+
+%% =========================
+%% PAGE 1 / PAGE 2
+%% =========================
+subgraph PAGES["Display Pages"]
+    P1a["Page 1 tick"] --> PC1["poll_command()"]
+    PC1 --> PU1["get_uptime()"]
+    PU1 --> PS1["get_temp_and_humidity()"]
+    PS1 --> PR1["build rows: Up + min/max"]
+    PR1 --> L2
+
+    P2a["Page 2 tick"] --> PC2["poll_command()"]
+    PC2 --> PS2["get_temp_and_humidity()"]
+    PS2 --> PR2["build rows: temp + hum"]
+    PR2 --> L2
+end
+
+%% =========================
+%% WIRING: MAIN LOOP -> PAGES
+%% =========================
+M1 --> L0 --> P1a
+M2 --> L0 --> P2a
+
+%% Optional: page 1 can also query ping for row 1 if connected
+P1a -. optional .-> N0

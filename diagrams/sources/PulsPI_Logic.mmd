@@ -1,0 +1,28 @@
+---
+config:
+  theme: dark
+  themeVariables:
+    background: '#0e0e0e'
+    primaryColor: '#1e1e1e'
+    secondaryColor: '#252525'
+    tertiaryColor: '#2a2a2a'
+    primaryTextColor: '#e6e6e6'
+    secondaryTextColor: '#cfcfcf'
+    tertiaryTextColor: '#b5b5b5'
+    lineColor: '#5a5a5a'
+    arrowheadColor: '#8a8a8a'
+    nodeBorder: '#444444'
+    clusterBorder: '#3a3a3a'
+    fontFamily: ''
+    fontSize: 13px
+---
+flowchart LR
+    Sensor[DHT Sensor] --> Commit["commit_reading()"]
+    Override[CLI Overrides] --> Commit
+
+    Commit --> State[Shared State]
+    State --> Stats[Min/Max / Uptime]
+
+    State --> LCD[LCD Renderer]
+    State --> Fan[Fan Controller]
+    State --> Log[Logger]
