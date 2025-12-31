@@ -160,7 +160,7 @@ minmax clear
    ```bash
    git clone https://github.com/yung-megafone/PulsPI.git
    cd PulsPI
-````
+    ```
 
 2. Flash **MicroPython** to your Pico using Thonny or your preferred tool.
 
