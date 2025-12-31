@@ -6,7 +6,7 @@
 ![Sensor](https://img.shields.io/badge/Sensor-DHT11-green?style=for-the-badge)
 ![CLI](https://img.shields.io/badge/CLI-Runtime%20Commands-lightgrey?style=for-the-badge)
 ![Download](https://img.shields.io/badge/Download-GitHub-brightgreen?logo=github&logoColor=white&style=for-the-badge)
-![License](https://img.shields.io/badge/License-Prosperity-blue?style=for-the-badge)
+![License](https://img.shields.io/badge/License-Non--Resale-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
 
 **PulsPI** is a Raspberry Pi Pico–based environmental and system monitoring project focused on real-time telemetry, local display output, and extensible control logic for embedded monitoring tasks. It is designed to run reliably on both **Pico W** (with optional networking) and **standard Pico** hardware.
@@ -185,17 +185,20 @@ Safety mechanisms and control logic (fan control, alarms) are implemented as *do
 
 ---
 
-## Third-Party Libraries
+## License
 
-PulsPI depends on the following third-party components:
+PulsPI is **source-available software**.
 
-* `pico_i2c_lcd` — MIT License
-* `lcd_api` — MIT License
+You may use, modify, and deploy this project freely, including for internal commercial purposes.  
+Resale, sublicensing, or monetization of PulsPI or derivative works is **not permitted** without explicit permission from the author.
 
-These libraries are used as-is and remain licensed under their respective terms.
+Full license terms are available in **[LICENSE.md](LICENSE.md)**.
 
 ---
 
-## License
+## Third-Party Libraries
 
-This project is licensed under the **Prosperity License**.
+PulsPI includes the following third-party components, used unmodified:
+
+- `pico_i2c_lcd` — MIT License  
+- `lcd_api` — MIT License
