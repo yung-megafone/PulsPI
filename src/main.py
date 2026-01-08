@@ -4,16 +4,32 @@ import network
 import socket
 import machine
 import config
+from machine import Pin, I2C
+from pico_i2c_lcd import I2cLcd
+import dht
+import sys
 try:
     import uping
     NET_AVAILABLE = True
 except ImportError:
     uping = None
     NET_AVAILABLE = False
-from machine import Pin, I2C
-from pico_i2c_lcd import I2cLcd
-import dht
-import sys
+try:
+    import build
+    VER = build.VERSION
+    BID = build.BUILD_ID
+except ImportError:
+    VER = "0.0.0"
+    BID = "uknwn"
+    
+# Optional user config (separate from Wi-Fi creds in config.py)
+try:
+    import pulspi_cfg as ucfg
+except ImportError:
+    ucfg = None
+
+def CFG(name, default):
+    return getattr(ucfg, name, default) if ucfg else default
 
 # Non-blocking stdin support (not present on every MicroPython build)
 try:
@@ -29,11 +45,15 @@ except ImportError:
 
 # LCD Setup
 print("Initializing Display")
-I2C_ADDR = 0x27
-I2C_SDA = Pin(0)
-I2C_SCL = Pin(1)
-i2c = I2C(0, sda=I2C_SDA, scl=I2C_SCL, freq=400000)
+
+I2C_ADDR = CFG("I2C_ADDR", 0x27)
+I2C_SDA  = Pin(CFG("I2C_SDA_PIN", 0))
+I2C_SCL  = Pin(CFG("I2C_SCL_PIN", 1))
+I2C_FREQ = CFG("I2C_FREQ", 400000)
+
+i2c = I2C(0, sda=I2C_SDA, scl=I2C_SCL, freq=I2C_FREQ)
 lcd = I2cLcd(i2c, I2C_ADDR, 2, 16)
+
 print("Display Ready")
 
 # Flicker-free line writer (pads/overwrites, no clears per frame)
@@ -64,7 +84,7 @@ def lcd_new_page():
 
 
 # Network Setup (optional)
-if NET_AVAILABLE:
+if NET_AVAILABLE: # it probably isnt cos im not using a pico w rn :p
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     wlan.connect(config.SSID, config.PASSWORD)
@@ -235,44 +255,63 @@ def ping(ip=config.TARGET):
 ##############################################################################################################
 
 # DHT11
-sensor = dht.DHT11(Pin(22))
+sensor = dht.DHT11(Pin(CFG("DHT_PIN", 22)))
 
 # Cached sensor values (prevents UI freezing)
 LAST_TEMP = None
 LAST_HUM = None
 LAST_READ_MS = 0
-DHT_MIN_INTERVAL_MS = 2000  # DHT11 needs ~2s between valid reads
 
 # Debug: tracks whether last committed reading came from real sensor or overrides
 SENSOR_SOURCE = "unknown"  # "sensor" | "override" | "unknown"
 
-def commit_reading(temp, hum, now_ms, source):
+DHT_MIN_INTERVAL_MS = CFG("DHT_MIN_INTERVAL_MS", 2000)
+REQUIRED_GOOD_READS = CFG("REQUIRED_GOOD_READS", 2)
+# Validation / warm-up runtime state
+SENSOR_READY = False
+GOOD_SENSOR_READS = 0
+
+
+def is_valid_temp_c(t):
+    # DHT11 range is 0-50C, but allow a little slack in case of sensor variance
+    return (t is not None) and (-20 <= t <= 80)
+
+def is_valid_hum_pct(h):
+    # DHT11 range is 20-90% typically, but output is 0-100 integer-ish.
+    # Critically: reject 0% (almost always a bogus boot read)
+    return (h is not None) and (1 <= h <= 100)
+
+def readings_valid(t, h):
+    return is_valid_temp_c(t) and is_valid_hum_pct(h)
+
+# Always cache, only update stats when allowed
+def commit_reading(temp, hum, now_ms, source, update_stats=False):
     global LAST_TEMP, LAST_HUM, LAST_READ_MS, SENSOR_SOURCE
     LAST_TEMP = temp
     LAST_HUM = hum
     LAST_READ_MS = now_ms
     SENSOR_SOURCE = source
-    update_min_max(temp, hum)
+    if update_stats:
+        update_min_max(temp, hum)
+
 
 def get_temp_and_humidity():
     global OVERRIDE_TEMP, OVERRIDE_HUM
     global LAST_TEMP, LAST_HUM, LAST_READ_MS
+    global SENSOR_READY, GOOD_SENSOR_READS
 
     now = utime.ticks_ms()
 
-    # Overrides behave exactly like real sensor updates
+    # Overrides: do NOT invent 0s. do NOT touch min/max unless both values exist
     if OVERRIDE_TEMP is not None or OVERRIDE_HUM is not None:
         temp = OVERRIDE_TEMP if OVERRIDE_TEMP is not None else LAST_TEMP
         hum  = OVERRIDE_HUM  if OVERRIDE_HUM  is not None else LAST_HUM
 
-        # Keep display from showing None if one side was never read yet
-        if temp is None:
-            temp = 0
-        if hum is None:
-            hum = 0
-
-        commit_reading(temp, hum, now, "override")
+        # Cache for display/debug, but only update stats if we have both real numbers
+        can_update_stats = (temp is not None and hum is not None)
+        commit_reading(temp, hum, now, "override", update_stats=can_update_stats)
         return temp, hum
+
 
     # Too soon to poll DHT again; return cached values immediately (no blocking)
     if (LAST_TEMP is not None and LAST_HUM is not None and
@@ -280,19 +319,78 @@ def get_temp_and_humidity():
         return LAST_TEMP, LAST_HUM
 
     try:
-        sensor.measure()  # fast; no sleep
+        sensor.measure()  # faster; no sleep
         temp = sensor.temperature()
         hum = sensor.humidity()
 
-        commit_reading(temp, hum, now, "sensor")
+        # Validate before committing anything that could affect stats
+        if readings_valid(temp, hum):
+            GOOD_SENSOR_READS += 1
+            if not SENSOR_READY and GOOD_SENSOR_READS >= REQUIRED_GOOD_READS:
+                SENSOR_READY = True
 
-        temp_f = temp * (9/5) + 32.0
-        print('Temperature: %3.1f C' % temp)
-        print('Temperature: %3.1f F' % temp_f)
-        print('Humidity: %3.1f %%' % hum)
-        return temp, hum
+            # Cache always; update stats only once we're ready
+            commit_reading(temp, hum, now, "sensor", update_stats=SENSOR_READY)
+
+            temp_f = temp * (9/5) + 32.0
+            print('Temperature: %3.1f C' % temp)
+            print('Temperature: %3.1f F' % temp_f)
+            print('Humidity: %3.1f %%' % hum)
+            return temp, hum
+        else:
+            # Invalid read: ignore it completely (do not alter LAST_* or min/max)
+            print(f"[DHT] Ignored invalid reading temp={temp} hum={hum}")
+            return LAST_TEMP, LAST_HUM
+
     except OSError:
         return LAST_TEMP, LAST_HUM  # fallback to last-known-good if available
+
+def splash_screen(seconds=2):
+    global SPLASH_ACTIVE
+    SPLASH_ACTIVE = True
+
+    lcd_new_page()
+    lcd_write_line(0, "PulsPI")
+    lcd_write_line(1, f"v{VER} {BID}"[:16])
+
+    t0 = utime.ticks_ms()
+    while utime.ticks_diff(utime.ticks_ms(), t0) < int(seconds * 1000):
+        poll_command()
+        utime.sleep_ms(50)
+
+    SPLASH_ACTIVE = False
+
+
+def init_screen(timeout_s=15):
+    # Optional pause before init loop
+    if INIT_SECONDS:
+        t0 = utime.ticks_ms()
+        while utime.ticks_diff(utime.ticks_ms(), t0) < int(INIT_SECONDS * 1000):
+            poll_command()
+            utime.sleep_ms(50)
+
+    lcd_new_page()
+    t0 = utime.ticks_ms()
+    last_draw = 0
+
+    while (not SENSOR_READY and
+           utime.ticks_diff(utime.ticks_ms(), t0) < timeout_s * 1000):
+
+        poll_command()
+        get_temp_and_humidity()
+
+        now = utime.ticks_ms()
+        if utime.ticks_diff(now, last_draw) >= 250:
+            last_draw = now
+
+            wifi = "--"
+            if NET_AVAILABLE:
+                wifi = "ok" if wlan.isconnected() else ".."
+
+            lcd_write_line(0, "Initializing...")
+            lcd_write_line(1, f"DHT {GOOD_SENSOR_READS}/{REQUIRED_GOOD_READS} WiFi {wifi}")
+
+        utime.sleep_ms(50)
 
 ##############################################################################################################
 ##############################################################################################################
@@ -438,37 +536,52 @@ def poll_command():
 
 ##############################################################################################################
 ##############################################################################################################
+# UI timing
+SPLASH_SECONDS = CFG("SPLASH_SECONDS", 2)
+INIT_SECONDS   = CFG("INIT_SECONDS", 0)
+INIT_TIMEOUT_S = CFG("INIT_TIMEOUT_S", 15)
+
+PAGE_SECONDS   = CFG("PAGE_SECONDS", 5)
+UI_TICK_MS     = CFG("UI_TICK_MS", 1000)
+
+# Boot / UI state
+SPLASH_ACTIVE = False
+
+splash_screen(SPLASH_SECONDS)
+init_screen(timeout_s=INIT_TIMEOUT_S)
 
 while True:
-    # --- Uptime / stats page ---
+        # --- Uptime / stats page ---
     lcd_new_page()
     start_time_display = utime.time()
-    while utime.time() - start_time_display < 5:
+    while utime.time() - start_time_display < PAGE_SECONDS:
         poll_command()
-
+        get_temp_and_humidity()
         uptime = get_uptime()
 
-        # Ensure min/max gets populated even if user stares at page 1 forever
-        # (non-blocking due to caching/rate-limit)
-        get_temp_and_humidity()
+        if not SPLASH_ACTIVE:
+            if not SENSOR_READY:
+                lcd_write_line(0, f"Init DHT {GOOD_SENSOR_READS}/{REQUIRED_GOOD_READS}")
+            else:
+                lcd_write_line(0, f"Up: {uptime}")
 
-        lcd_write_line(0, f"Up: {uptime}")
+            stats_line = f"T {fmt_mm(MIN_TEMP)}/{fmt_mm(MAX_TEMP)} H {fmt_mm(MIN_HUM)}/{fmt_mm(MAX_HUM)}"
+            lcd_write_line(1, stats_line)
 
-        # T xx/XX  H xx/XX (fits in 16)
-        stats_line = f"T {fmt_mm(MIN_TEMP)}/{fmt_mm(MAX_TEMP)} H {fmt_mm(MIN_HUM)}/{fmt_mm(MAX_HUM)}"
-        lcd_write_line(1, stats_line)
+        utime.sleep_ms(UI_TICK_MS)
 
-        utime.sleep(1)
-
-    # --- Temp/RH page ---
+        # --- Temp/RH page ---
     lcd_new_page()
     start_time_display = utime.time()
-    while utime.time() - start_time_display < 5:
+    while utime.time() - start_time_display < PAGE_SECONDS:
         poll_command()
 
         temperature, humidity = get_temp_and_humidity()
+        t_str = "--" if temperature is None else str(temperature)
+        h_str = "--" if humidity is None else str(humidity)
 
-        lcd_write_line(0, f"Temp: {temperature} \xDF C")
-        lcd_write_line(1, f"Humid: {humidity} % RH")
+        if not SPLASH_ACTIVE:
+            lcd_write_line(0, f"Temp: {t_str} \xDF C")
+            lcd_write_line(1, f"Humid: {h_str} % RH")
 
-        utime.sleep(1)
+        utime.sleep_ms(UI_TICK_MS)
