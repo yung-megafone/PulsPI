@@ -1,0 +1,3 @@
+VERSION = "1.1.0"
+BUILD_ID = "695F2513"
+PROJECT = "PulsPI"
